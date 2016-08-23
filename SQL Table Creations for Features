@@ -1,0 +1,62 @@
+--This is the code used to create and modify Tables within our POSTGRES database, which is stored on AWS. The identifying information is as follows:
+--Host: teamoriginal.ccc95gjlnnc.us-east-1.rds.amazonaws.com
+--Port:5432
+--Username: [redacted]
+--Password: [redacted]
+--Below is the statement used to create the table. Most of the data is imported from the WMATA October 2015 Ridership data, others are derived from that data. The data is available here: http://planitmetro.com/2016/03/14/metrorail-ridership-data-download-october-2015/
+
+
+CREATE TABLE "RidershipData2015"
+(
+  "ENTDATESERVICETYPE" text, -- Describes whether weekday or Saturday or Sunday. For our work, we will drop records other than weekday.
+  "ENTDATEDAYOFWEEK" text, -- Describes which day of the week, 3 character abbreviation. Will create another column converting to integer, with 0 = Mon, 1 = Tues, etc.
+  "ENTStation" text, -- The entering station for the consumer where the number of trips are recorded on average for the period of performance. We will drop the exit station and average based upon all stations.
+  "EXTStation" text, -- The station that the consumers exited. The average number of trips are taken by overall consumers entering and exiting the stations, the total number of trips each user made.
+  "EntPeriod" text, -- The type of time of day in character representation. This column will also be dropped. Values include AM Peak, PM Peak, Midday, Evening, etc.
+  "ENTQUARTHOUR" text, -- The quarter hour for the time period the consumer entered. This will need to be converted to time based upon the entering quarter hour (first value).
+  "Avg_Trips" integer, -- The total number of average trips per consumer based upon the entering and exit station, as well as the time period of interest.
+  "AvgTripsByEntStationByDateByQuartHour" numeric, -- The calculated average number of trips per consumer by the Entering Station, only by the same date and the same quarter hour.
+  "DateDayofWeekInt" integer -- The created integer value of the day of the week.
+)
+WITH (
+  OIDS=FALSE
+);
+
+--From there, values were deleted that were not needed by our team, as we are storing this online (we don't want to pay), and we only captured data during morning and evening rush (5 AM to 10 AM and 5 PM to 10 PM on weekdays).
+--Below are some DELETE statements we used to get rid of extraneous data:
+
+DELETE FROM "RidershipData2015"
+ WHERE "ENTSERVICETYPE" <> 'Weekday';
+
+--We also don't need late night info, timeframes in question slip into all other categories of "EntPeriod" 
+ DELETE FROM "RidershipData2015"
+ WHERE "ENTPeriod" <> 'Late Night Peak';
+ 
+ --We need to populate values for "DateDayofWeekInt" to join our records to our timestamped data. We use pandas dataframes elsewhere to derive day of the week from our timestamped data. It is in integers, so I created an integer column to join the data easier.
+ UPDATE "RidershipData2015"
+   SET "DateDayofWeekInt"= 0
+ WHERE "ENTDATEDAYOFWEEK" = 'Mon'
+ 
+ --Repeated for each day of the week
+ UPDATE "RidershipData2015"
+   SET "DateDayofWeekInt"= 1
+ WHERE "ENTDATEDAYOFWEEK" = 'Tue'
+ 
+ UPDATE "RidershipData2015"
+   SET "DateDayofWeekInt"= 2
+ WHERE "ENTDATEDAYOFWEEK" = 'Wed'
+ 
+ UPDATE "RidershipData2015"
+   SET "DateDayofWeekInt"= 3
+ WHERE "ENTDATEDAYOFWEEK" = 'Thu'
+ 
+ UPDATE "RidershipData2015"
+   SET "DateDayofWeekInt"= 4
+ WHERE "ENTDATEDAYOFWEEK" = 'Fri'
+ 
+ --The column for "AvgTripsByEntStationByDateByQuartHour" is a calculated value using only the entering station, the quarter hour, and the day of the week. The query was first run to check for values with the following query:
+ SELECT "ENTDATEDAYOFWEEK", "ENTQUARTHOUR", "ENTStation", AVG("Avg_Trips")
+  FROM "RidershipData2015"
+  GROUP BY "ENTDATEDAYOFWEEK", "ENTQUARTHOUR", "ENTStation"; --This will produce results in a fourth column that is used to populate "AvgTripsByEntStationByDateByQuartHour"
+  
+  
